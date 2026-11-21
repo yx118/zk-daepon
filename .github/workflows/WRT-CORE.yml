@@ -45,27 +45,40 @@ on:
         type: string
 
 env:
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  WRT_CONFIG: ${{inputs.WRT_CONFIG}}
-  WRT_THEME: ${{inputs.WRT_THEME}}
-  WRT_NAME: ${{inputs.WRT_NAME}}
-  WRT_SSID: ${{inputs.WRT_SSID}}
-  WRT_WORD: ${{inputs.WRT_WORD}}
-  WRT_IP: ${{inputs.WRT_IP}}
-  WRT_PW: ${{inputs.WRT_PW}}
-  WRT_REPO: ${{inputs.WRT_REPO}}
-  WRT_BRANCH: ${{inputs.WRT_BRANCH}}
-  WRT_SOURCE: ${{inputs.WRT_SOURCE}}
-  WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
-  WRT_TEST: ${{inputs.WRT_TEST}}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  WRT_CONFIG: ${{ inputs.WRT_CONFIG }}
+  WRT_THEME: ${{ inputs.WRT_THEME }}
+  WRT_NAME: ${{ inputs.WRT_NAME }}
+  WRT_SSID: ${{ inputs.WRT_SSID }}
+  WRT_WORD: ${{ inputs.WRT_WORD }}
+  WRT_IP: ${{ inputs.WRT_IP }}
+  WRT_PW: ${{ inputs.WRT_PW }}
+  WRT_REPO: ${{ inputs.WRT_REPO }}
+  WRT_BRANCH: ${{ inputs.WRT_BRANCH }}
+  WRT_SOURCE: ${{ inputs.WRT_SOURCE }}
+  WRT_PACKAGE: ${{ inputs.WRT_PACKAGE }}
+  WRT_TEST: ${{ inputs.WRT_TEST }}
 
 jobs:
   core:
-    name: ${{inputs.WRT_SOURCE}}
+    name: ${{ inputs.WRT_SOURCE }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Projects
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
+
+      - name: Free Up Disk Space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet \
+                     /opt/ghc \
+                     /usr/local/lib/android \
+                     /usr/local/share/boost \
+                     /opt/hostedtoolcache/CodeQL
+          docker system prune -af 2>/dev/null || true
+          echo "=== After cleanup ==="
+          df -h
 
       - name: Initialization Environment
         env:
@@ -83,24 +96,24 @@ jobs:
           sudo -E timedatectl set-timezone "Asia/Shanghai"
 
           sudo mkdir -p /mnt/build_wrt
-          sudo chown $USER:$USER /mnt/build_wrt
-          sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
+          sudo chown "$USER:$USER" /mnt/build_wrt
+          sudo ln -s /mnt/build_wrt "$GITHUB_WORKSPACE/wrt"
 
       - name: Initialization Values
         run: |
-          echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-          echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
-          echo "WRT_INFO=${WRT_SOURCE%%/*}" >> $GITHUB_ENV
-          echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt)" >> $GITHUB_ENV
-          echo "WRT_WIFI=wifi-no" >> $GITHUB_ENV
-          echo "WRT_KVER=none" >> $GITHUB_ENV
-          echo "WRT_LIST=none" >> $GITHUB_ENV
+          echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> "$GITHUB_ENV"
+          echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> "$GITHUB_ENV"
+          echo "WRT_INFO=${WRT_SOURCE%%/*}" >> "$GITHUB_ENV"
+          echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt)" >> "$GITHUB_ENV"
+          echo "WRT_WIFI=wifi-no" >> "$GITHUB_ENV"
+          echo "WRT_KVER=none" >> "$GITHUB_ENV"
+          echo "WRT_LIST=none" >> "$GITHUB_ENV"
 
       - name: Clone Code
         run: |
-          git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
+          git clone --depth=1 --single-branch --branch "$WRT_BRANCH" "$WRT_REPO" ./wrt/
 
-          cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $GITHUB_ENV
+          cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> "$GITHUB_ENV"
 
           # GitHub Action 移除国内下载源
           PROJECT_MIRRORS_FILE="./scripts/projectsmirrors.json"
@@ -115,10 +128,10 @@ jobs:
       - name: Check Caches
         id: check-cache
         if: env.WRT_TEST != 'true'
-        uses: actions/cache@main
+        uses: actions/cache@v4
         with:
-          key: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
-          restore-keys: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}
+          key: ${{ env.WRT_CONFIG }}-${{ env.WRT_INFO }}-${{ env.WRT_HASH }}
+          restore-keys: ${{ env.WRT_CONFIG }}-${{ env.WRT_INFO }}
           path: |
             ./wrt/.ccache
             ./wrt/staging_dir/host*
@@ -139,10 +152,10 @@ jobs:
             echo "caches missed!"
           fi
 
-          if ${{steps.check-cache.outputs.cache-hit != 'true'}}; then
+          if [[ "${{ steps.check-cache.outputs.cache-hit }}" != "true" ]]; then
             CACHE_LIST=$(gh cache list --key "$WRT_CONFIG-$WRT_INFO" | cut -f 1)
             for CACHE_KEY in $CACHE_LIST; do
-              gh cache delete $CACHE_KEY
+              gh cache delete "$CACHE_KEY"
             done
 
             echo "caches cleanup done!"
@@ -159,20 +172,20 @@ jobs:
         run: |
           cd ./wrt/package/
 
-          $GITHUB_WORKSPACE/Scripts/Packages.sh
-          $GITHUB_WORKSPACE/Scripts/Handles.sh
+          "$GITHUB_WORKSPACE/Scripts/Packages.sh"
+          "$GITHUB_WORKSPACE/Scripts/Handles.sh"
 
       - name: Custom Settings
         run: |
           cd ./wrt/
 
           if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
-            cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt >> .config
+            cat "$GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt" >> .config
           else
-            cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt $GITHUB_WORKSPACE/Config/GENERAL.txt >> .config
+            cat "$GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt" "$GITHUB_WORKSPACE/Config/GENERAL.txt" >> .config
           fi
 
-          $GITHUB_WORKSPACE/Scripts/Settings.sh
+          "$GITHUB_WORKSPACE/Scripts/Settings.sh"
 
           make defconfig -j$(nproc) && make clean -j$(nproc)
 
@@ -191,26 +204,28 @@ jobs:
           make -j$(nproc) || make -j1 V=s
 
       - name: Machine Information
+        if: always()
         run: |
-          cd ./wrt/
+          cd ./wrt/ 2>/dev/null || true
 
           echo "======================="
-          lscpu | grep -E "name|Core|Thread"
+          lscpu | grep -E "name|Core|Thread" || true
           echo "======================="
           df -h
           echo "======================="
-          du -h --max-depth=1
+          du -h --max-depth=1 /mnt/build_wrt 2>/dev/null || true
           echo "======================="
 
       - name: Package Firmware
+        if: success()
         run: |
-          cd ./wrt/ && mkdir ./upload/
+          cd ./wrt/ && mkdir -p ./upload/
 
-          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+          cp -f ./.config "./upload/Config-$WRT_CONFIG-$WRT_INFO-$WRT_BRANCH-$WRT_DATE.txt"
 
-          if [[ $WRT_TEST != 'true' ]]; then
-            echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
-            echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ')" >> $GITHUB_ENV
+          if [[ "$WRT_TEST" != 'true' ]]; then
+            echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> "$GITHUB_ENV"
+            echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ')" >> "$GITHUB_ENV"
 
             # 生成编译内容摘要(按类别分组)
             MANIFEST=$(find ./bin/targets/ -type f -name "*.manifest" | head -1)
@@ -232,10 +247,10 @@ jobs:
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
-              EXT=$(basename $FILE | cut -d '.' -f 2-)
-              NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
-              NEW_FILE="zk-daepon-$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE"."$EXT"
-              mv -f $FILE ./upload/$NEW_FILE
+              EXT=$(basename "$FILE" | cut -d '.' -f 2-)
+              NAME=$(basename "$FILE" | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
+              NEW_FILE="zk-daepon-$NAME-$WRT_INFO-$WRT_BRANCH-$WRT_DATE.$EXT"
+              mv -f "$FILE" "./upload/$NEW_FILE"
             done
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
@@ -244,28 +259,29 @@ jobs:
           fi
 
       - name: Release Firmware
-        uses: softprops/action-gh-release@master
+        if: success()
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          tag_name: ${{ env.WRT_CONFIG }}-${{ env.WRT_INFO }}-${{ env.WRT_BRANCH }}-${{ env.WRT_DATE }}
           files: ./wrt/upload/*.*
           body: |
             这个固件包内含多个设备，请选择你需要的设备固件刷写！
 
             ## 本次编译内容
-            内核版本：**${{env.WRT_KVER}}** ｜ 设备主机名：**${{env.WRT_NAME}}**
+            内核版本：**${{ env.WRT_KVER }}** ｜ 设备主机名：**${{ env.WRT_NAME }}**
 
             详细按类别清单见随包附件《编译内容摘要.md》。
 
             ---
 
             ### 📦 内置 LuCI 应用
-            ${{env.WRT_LIST}}
+            ${{ env.WRT_LIST }}
 
             ---
 
-            源码：${{env.WRT_REPO}}
-            分支：${{env.WRT_BRANCH}}
-            提交：${{env.WRT_HASH}}
-            配置：${{env.WRT_CONFIG}} ｜ 平台：${{env.WRT_TARGET}}
-            登录地址：${{env.WRT_IP}} ｜ 登录密码：${{env.WRT_PW}}
-            WIFI名称：${{env.WRT_SSID}} ｜ WIFI密码：${{env.WRT_WORD}}
+            源码：${{ env.WRT_REPO }}
+            分支：${{ env.WRT_BRANCH }}
+            提交：${{ env.WRT_HASH }}
+            配置：${{ env.WRT_CONFIG }} ｜ 平台：${{ env.WRT_TARGET }}
+            登录地址：${{ env.WRT_IP }} ｜ 登录密码：${{ env.WRT_PW }}
+            WIFI名称：${{ env.WRT_SSID }} ｜ WIFI密码：${{ env.WRT_WORD }}
